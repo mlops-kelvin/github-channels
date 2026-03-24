@@ -1,0 +1,18 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "github-channels",
+  "description": "GitHub webhook channel for Claude Code — real-time push, PR, issue, and CI events streamed into your session",
+  "owner": {
+    "name": "mlops-kelvin",
+    "url": "https://github.com/mlops-kelvin"
+  },
+  "plugins": [
+    {
+      "name": "github-channels",
+      "description": "GitHub webhook channel for Claude Code — real-time push, PR, issue, and CI events streamed into your session with trust tiers and mute controls.",
+      "source": ".",
+      "category": "productivity",
+      "homepage": "https://github.com/mlops-kelvin/github-channels"
+    }
+  ]
+}
