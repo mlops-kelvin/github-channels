@@ -25,15 +25,32 @@ function loadEnv(): void {
   try {
     for (const line of readFileSync(ENV_FILE, "utf8").split("\n")) {
       const m = line.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
-      if (m && process.env[m[1]] === undefined) process.env[m[1]] = m[2];
+      if (m && process.env[m[1]] === undefined) {
+        // Strip surrounding quotes (single or double)
+        const val = m[2].replace(/^(['"])(.*)\1$/, "$2");
+        process.env[m[1]] = val;
+      }
     }
-  } catch {}
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+      process.stderr.write(`github-channels: failed to read .env: ${err}\n`);
+    }
+  }
 }
 
 loadEnv();
 
 const PORT = parseInt(process.env.PORT || "8789", 10);
 const WEBHOOK_SECRET = process.env.GITHUB_WEBHOOK_SECRET || "";
+
+if (!WEBHOOK_SECRET) {
+  process.stderr.write(
+    `github-channels: GITHUB_WEBHOOK_SECRET required\n` +
+    `  set in ${ENV_FILE}\n` +
+    `  generate: openssl rand -hex 20\n`
+  );
+  process.exit(1);
+}
 const ALLOWED_REPOS = (process.env.GITHUB_REPOS || "")
   .split(",")
   .map((r) => r.trim())
@@ -111,7 +128,6 @@ const mcp = new Server(
 // ---------------------------------------------------------------------------
 
 function verifySignature(payload: string, signature: string | null): boolean {
-  if (!WEBHOOK_SECRET) return true; // no secret configured = skip verification
   if (!signature) return false;
 
   const expected = "sha256=" +
@@ -132,6 +148,13 @@ function verifySignature(payload: string, signature: string | null): boolean {
 // ---------------------------------------------------------------------------
 
 type GitHubPayload = Record<string, any>;
+
+const MAX_CONTENT_LENGTH = 2000;
+
+function truncate(text: string, max = MAX_CONTENT_LENGTH): string {
+  if (text.length <= max) return text;
+  return text.slice(0, max - 3) + "...";
+}
 
 function formatSummary(eventType: string, payload: GitHubPayload): string {
   const repo = payload.repository?.full_name || "unknown";
@@ -275,6 +298,11 @@ Bun.serve({
       return new Response("not found", { status: 404 });
     }
 
+    // Reject webhooks if MCP transport not yet connected
+    if (!mcpReady) {
+      return new Response("MCP not ready", { status: 503 });
+    }
+
     const body = await req.text();
     const signature = req.headers.get("x-hub-signature-256");
     const eventType = req.headers.get("x-github-event") || "unknown";
@@ -324,7 +352,7 @@ Bun.serve({
     }
 
     // Format and push to Claude Code session
-    const summary = formatSummary(eventType, payload);
+    const summary = truncate(formatSummary(eventType, payload));
     const content = CHANNEL_TIP ? `${summary}\n\n${CHANNEL_TIP}` : summary;
     const action = payload.action || "";
 
@@ -354,6 +382,12 @@ Bun.serve({
   },
 });
 
+// ---------------------------------------------------------------------------
+// Startup (B2 fix — webhooks rejected until MCP transport is connected)
+// ---------------------------------------------------------------------------
+
+let mcpReady = false;
+
 process.stderr.write(
   `github-channels: listening on 127.0.0.1:${PORT}\n` +
     `  repos: ${ALLOWED_REPOS.length > 0 ? ALLOWED_REPOS.join(", ") : "(all)"}\n` +
@@ -361,8 +395,23 @@ process.stderr.write(
     `  muted: ${muted}\n`
 );
 
+// MCP connect after HTTP — StdioServerTransport captures stdin/stdout.
+// Webhooks arriving before connect completes get 503 (mcpReady flag).
+const transport = new StdioServerTransport();
+await mcp.connect(transport);
+mcpReady = true;
+process.stderr.write("github-channels: MCP transport connected\n");
+
 // ---------------------------------------------------------------------------
-// MCP Transport
+// Graceful shutdown — exit when MCP connection closes (stdin EOF)
 // ---------------------------------------------------------------------------
 
-await mcp.connect(new StdioServerTransport());
+function shutdown(): void {
+  process.stderr.write("github-channels: shutting down\n");
+  process.exit(0);
+}
+
+process.on("SIGTERM", shutdown);
+process.on("SIGINT", shutdown);
+transport.onerror = shutdown;
+transport.onclose = shutdown;

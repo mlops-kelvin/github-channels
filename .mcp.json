@@ -4,7 +4,7 @@
       "type": "stdio",
       "command": "bun",
       "args": ["run", "server.ts"],
-      "cwd": "/home/kelvin/projects/github-channels"
+      "cwd": "/path/to/github-channels"
     }
   }
 }
