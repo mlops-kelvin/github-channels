@@ -33,17 +33,9 @@ TRUSTED_ACTORS=your-username,teammate     # GitHub usernames — events tagged t
 CHANNEL_TIP=Tip: curl -X POST localhost:8789/mute/owner/repo?hours=5 to mute a noisy repo.
 ```
 
-### 3. Start Claude Code with Channels
+### 3. Register the MCP Server
 
-Launch Claude Code with the development channels flag:
-
-```bash
-claude --dangerously-load-development-channels server:github-channels --channels plugin:discord@claude-plugins-official
-```
-
-This loads `github-channels` as a development channel server and the Discord plugin from `claude-plugins-official`. Both are required for real-time perception of GitHub events and Discord messages within your Claude Code session.
-
-Alternatively, wire it as an MCP server in your project's `.claude/settings.json` or `.mcp.json`:
+Add to your project's `.mcp.json` (or `.claude/settings.json`):
 
 ```json
 {
@@ -57,7 +49,21 @@ Alternatively, wire it as an MCP server in your project's `.claude/settings.json
 }
 ```
 
-### 4. Configure GitHub webhook
+This registers the server so Claude Code knows how to start it. The name `github-channels` is what you'll reference in the next step.
+
+### 4. Start Claude Code with Channels
+
+Launch Claude Code with the development channels flag:
+
+```bash
+claude --dangerously-load-development-channels server:github-channels --channels plugin:discord@claude-plugins-official
+```
+
+**Both steps are required.** Step 3 registers the server. Step 4 tells Claude Code to treat it as a channel server (real-time event streaming) rather than a regular MCP tool server. The `server:` prefix references the MCP server name from your config.
+
+Without the MCP registration, you'll get: `server:github-channels · no MCP server configured with that name`.
+
+### 5. Configure GitHub webhook
 
 On each monitored repo: Settings > Webhooks > Add webhook
 
@@ -66,7 +72,7 @@ On each monitored repo: Settings > Webhooks > Add webhook
 - **Secret**: same value as `GITHUB_WEBHOOK_SECRET` in .env
 - **Events**: select the events matching your `GITHUB_EVENTS` config
 
-### 5. Reverse proxy
+### 6. Reverse proxy
 
 The server binds to `127.0.0.1:8789` (localhost only). Use a reverse proxy (Angie, nginx, Caddy) to expose the `/webhook` endpoint to the internet for GitHub to reach.
 
