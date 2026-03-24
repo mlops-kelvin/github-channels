@@ -1,10 +1,8 @@
 {
   "mcpServers": {
     "github-channels": {
-      "type": "stdio",
       "command": "bun",
-      "args": ["run", "server.ts"],
-      "cwd": "/path/to/github-channels"
+      "args": ["run", "--cwd", "${CLAUDE_PLUGIN_ROOT}", "--shell=bun", "--silent", "start"]
     }
   }
 }
