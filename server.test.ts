@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
-import { createHmac } from "crypto";
+import { createHmac, randomBytes } from "crypto";
 
 const PORT = 18789; // test port — avoids conflict with running instance
 const BASE = `http://127.0.0.1:${PORT}`;
-const SECRET = "test-webhook-secret-123";
+const HMAC_KEY = randomBytes(20).toString("hex"); // generated per test run
 
 // We test the HTTP layer directly. MCP stdio is tested implicitly —
 // if the server starts and responds to HTTP, the MCP transport is alive.
@@ -16,7 +16,7 @@ beforeAll(async () => {
     env: {
       ...process.env,
       PORT: String(PORT),
-      GITHUB_WEBHOOK_SECRET: SECRET,
+      GITHUB_WEBHOOK_SECRET: HMAC_KEY,
       GITHUB_REPOS: "test-org/repo-a,test-org/repo-b",
       GITHUB_EVENTS: "push,pull_request,issues,issue_comment",
       MUTED: "false",
@@ -41,7 +41,7 @@ afterAll(() => {
 });
 
 function sign(body: string): string {
-  return "sha256=" + createHmac("sha256", SECRET).update(body).digest("hex");
+  return "sha256=" + createHmac("sha256", HMAC_KEY).update(body).digest("hex");
 }
 
 function webhook(
