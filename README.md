@@ -8,7 +8,9 @@ GitHub sends webhook POSTs when things happen (push, PR, issue comment, CI resul
 
 ## Setup
 
-### 1. Install
+Follow all 6 steps in order. Every step is required.
+
+### 1. Clone and install
 
 ```bash
 git clone https://github.com/mlops-kelvin/github-channels.git
@@ -16,13 +18,13 @@ cd github-channels
 bun install
 ```
 
-### 2. Configure
+### 2. Configure environment
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env`:
+Edit `.env` with your values:
 
 ```env
 GITHUB_WEBHOOK_SECRET=your-secret-here    # openssl rand -hex 20
@@ -33,7 +35,7 @@ TRUSTED_ACTORS=your-username,teammate     # GitHub usernames — events tagged t
 CHANNEL_TIP=Tip: curl -X POST localhost:8789/mute/owner/repo?hours=5 to mute a noisy repo.
 ```
 
-### 3. Register the MCP Server
+### 3. Register the MCP server
 
 Add to your project's `.mcp.json` (or `.claude/settings.json`):
 
@@ -43,38 +45,76 @@ Add to your project's `.mcp.json` (or `.claude/settings.json`):
     "github-channels": {
       "type": "stdio",
       "command": "bun",
-      "args": ["run", "/path/to/github-channels/server.ts"]
+      "args": ["run", "/absolute/path/to/github-channels/server.ts"]
     }
   }
 }
 ```
 
-This registers the server so Claude Code knows how to start it. The name `github-channels` is what you'll reference in the next step.
+The path must be absolute and point to `server.ts` at the repository root. This is the only entry point.
 
-### 4. Start Claude Code with Channels
+### 4. Set up reverse proxy
 
-Launch Claude Code with the development channels flag:
+The server binds to `127.0.0.1:8789` (localhost only). Use a reverse proxy (Angie, nginx, Caddy) to expose the `/webhook` path to the internet so GitHub can reach it.
+
+Example (Angie/nginx):
+
+```nginx
+location /webhook {
+    proxy_pass http://127.0.0.1:8789/webhook;
+}
+```
+
+### 5. Configure GitHub webhooks
+
+On each monitored repo: Settings > Webhooks > Add webhook
+
+- **Payload URL**: `https://your-domain.com/webhook`
+- **Content type**: `application/json`
+- **Secret**: same value as `GITHUB_WEBHOOK_SECRET` in .env
+- **Events**: select the events matching your `GITHUB_EVENTS` config
+
+### 6. Start Claude Code
+
+```bash
+claude --dangerously-load-development-channels server:github-channels
+```
+
+This flag tells Claude Code to treat `github-channels` (the MCP server registered in step 3) as a channel server. Without this flag, the server starts as a regular MCP server and events won't stream into your session.
+
+To also load the Discord plugin:
 
 ```bash
 claude --dangerously-load-development-channels server:github-channels --channels plugin:discord@claude-plugins-official
 ```
 
-**Both steps are required.** Step 3 registers the server. Step 4 tells Claude Code to treat it as a channel server (real-time event streaming) rather than a regular MCP tool server. The `server:` prefix references the MCP server name from your config.
+## Verify
 
-Without the MCP registration, you'll get: `server:github-channels · no MCP server configured with that name`.
+After completing setup, run the verification script:
 
-### 5. Configure GitHub webhook
+```bash
+./verify.sh
+```
 
-On each monitored repo: Settings > Webhooks > Add webhook
+This checks three things in order:
+1. HTTP server is reachable on port 8789
+2. MCP transport is connected (Claude Code handshake complete)
+3. Test webhook is accepted and delivered to your session
 
-- **Payload URL**: `https://your-domain.com/webhook` (reverse proxy forwards to localhost:8789/webhook)
-- **Content type**: `application/json`
-- **Secret**: same value as `GITHUB_WEBHOOK_SECRET` in .env
-- **Events**: select the events matching your `GITHUB_EVENTS` config
+If verification passes, you should see a test event appear in your Claude Code session.
 
-### 6. Reverse proxy
+You can also check status manually:
 
-The server binds to `127.0.0.1:8789` (localhost only). Use a reverse proxy (Angie, nginx, Caddy) to expose the `/webhook` endpoint to the internet for GitHub to reach.
+```bash
+curl localhost:8789/status
+```
+
+Key fields in the response:
+- `mcp_connected`: true if Claude Code has connected via MCP
+- `channels_ready`: true if MCP is connected and server is not muted
+- `counts.delivered`: number of events successfully pushed to your session
+
+If `mcp_connected` is false, Claude Code either isn't running with the `--dangerously-load-development-channels` flag, or the MCP server name in `.mcp.json` doesn't match `server:github-channels`.
 
 ## Control Endpoints
 
@@ -96,14 +136,6 @@ curl -X POST localhost:8789/unmute/owner/repo          # unmute
 curl -X POST localhost:8789/mute-all?hours=8   # mute all repos for 8 hours
 curl -X POST localhost:8789/unmute-all          # unmute everything
 ```
-
-### Status
-
-```bash
-curl localhost:8789/status
-```
-
-Returns: muted state, muted repos with time remaining, configured repos/events, event counters.
 
 ## Event Format
 
@@ -131,6 +163,18 @@ username pushed 3 commit(s) to owner/repo/main
 | `workflow_run` | GitHub Actions workflow completed |
 | `release` | Release published |
 
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| `server:github-channels · no MCP server configured` | MCP server not registered | Add the `mcpServers` entry to `.mcp.json` (step 3) |
+| `/status` shows `mcp_connected: false` | Claude Code not using channel flag | Restart with `--dangerously-load-development-channels server:github-channels` (step 6) |
+| `/status` shows `counts.received: 0` | Webhooks not reaching server | Check GitHub webhook deliveries tab and reverse proxy config |
+| Webhook returns 401 | HMAC secret mismatch | Ensure `.env` secret matches GitHub webhook config |
+| Webhook returns 403 | Repo not in allowlist | Add repo to `GITHUB_REPOS` in `.env`, restart server |
+| Webhook returns 503 | MCP not ready | Claude Code hasn't completed MCP handshake yet — wait or restart |
+| Events received but not visible | Channel protocol issue | Check `counts.delivered` in `/status` — if non-zero, events were sent but Claude Code may not be displaying them |
+
 ## Security
 
 ### Transport layer (HMAC)
@@ -156,7 +200,7 @@ The MCP instructions warn agents about prompt injection via public repo comments
 ## Development
 
 ```bash
-bun test           # run test suite (17 tests)
+bun test           # run test suite
 bun run dev        # start with --watch for development
 ```
 

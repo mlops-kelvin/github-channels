@@ -22,6 +22,7 @@ function loadEnv(): void {
 loadEnv();
 
 export const PORT = parseInt(process.env.PORT || "8789", 10);
+export const HOST = process.env.HOST || "127.0.0.1";
 export const WEBHOOK_SECRET = process.env.GITHUB_WEBHOOK_SECRET || "";
 export const ALLOWED_REPOS = (process.env.GITHUB_REPOS || "")
   .split(",")

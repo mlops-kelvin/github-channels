@@ -11,8 +11,8 @@
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { PORT } from "./src/config.ts";
-import { startWebhookServer } from "./src/webhook.ts";
+import { PORT, HOST } from "./src/config.ts";
+import { startWebhookServer, setMcpConnected } from "./src/webhook.ts";
 
 const INSTRUCTIONS = [
   'GitHub webhook events arrive as <channel source="github" event_type="..." repo="..." action="...">.',
@@ -46,7 +46,7 @@ let mcpReady = false;
 startWebhookServer(mcp, () => mcpReady);
 
 process.stderr.write(
-  `github-channels: listening on 127.0.0.1:${PORT}\n`
+  `github-channels: listening on ${HOST}:${PORT}\n`
 );
 
 // --- MCP Transport (after HTTP — StdioServerTransport captures stdin/stdout) ---
@@ -54,7 +54,8 @@ process.stderr.write(
 const transport = new StdioServerTransport();
 await mcp.connect(transport);
 mcpReady = true;
-process.stderr.write("github-channels: MCP transport connected\n");
+setMcpConnected(true);
+process.stderr.write("github-channels: MCP transport connected — channels ready\n");
 
 // --- Graceful Shutdown ---
 

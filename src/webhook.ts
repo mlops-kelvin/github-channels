@@ -1,13 +1,19 @@
 import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { PORT, ALLOWED_REPOS, ALLOWED_EVENTS, TRUSTED_ACTORS, CHANNEL_TIP } from "./config.ts";
+import { PORT, HOST, ALLOWED_REPOS, ALLOWED_EVENTS, TRUSTED_ACTORS, CHANNEL_TIP } from "./config.ts";
 import { isGlobalMuted, setGlobalMute, isRepoMuted, muteRepo, unmuteRepo, muteAll, unmuteAll, listMutedRepos, getEventCounts, incrementCount } from "./mute.ts";
 import { formatSummary, type GitHubPayload } from "./format.ts";
 import { verifySignature } from "./verify.ts";
 
+let mcpConnected = false;
+
+export function setMcpConnected(value: boolean): void {
+  mcpConnected = value;
+}
+
 export function startWebhookServer(mcp: Server, isReady: () => boolean): void {
   Bun.serve({
     port: PORT,
-    hostname: "127.0.0.1",
+    hostname: HOST,
     async fetch(req) {
       const url = new URL(req.url);
 
@@ -23,6 +29,8 @@ export function startWebhookServer(mcp: Server, isReady: () => boolean): void {
       }
       if (req.method === "GET" && url.pathname === "/status") {
         return json({
+          mcp_connected: mcpConnected,
+          channels_ready: mcpConnected && !isGlobalMuted(),
           muted: isGlobalMuted(),
           mutedRepos: listMutedRepos(),
           repos: ALLOWED_REPOS,
