@@ -43,6 +43,8 @@ const ALLOWED_EVENTS = (process.env.GITHUB_EVENTS || "")
   .map((e) => e.trim())
   .filter(Boolean);
 
+const CHANNEL_TIP = process.env.CHANNEL_TIP || "";
+
 let muted = process.env.MUTED === "true";
 
 // Per-repo mutes with optional expiry
@@ -240,6 +242,30 @@ Bun.serve({
       });
     }
 
+    // Mute all repos: POST /mute-all?hours=8
+    if (req.method === "POST" && url.pathname === "/mute-all") {
+      const hours = url.searchParams.get("hours");
+      for (const repo of ALLOWED_REPOS) {
+        muteRepo(repo, hours ? parseFloat(hours) : undefined);
+      }
+      muted = ALLOWED_REPOS.length === 0; // global mute if no repo allowlist
+      const msg = hours ? `${hours}h` : "indefinite";
+      return new Response(
+        JSON.stringify({ muted_repos: ALLOWED_REPOS, hours: msg, global_mute: muted }),
+        { headers: { "content-type": "application/json" } }
+      );
+    }
+
+    // Unmute all repos: POST /unmute-all
+    if (req.method === "POST" && url.pathname === "/unmute-all") {
+      repoMutes.clear();
+      muted = false;
+      return new Response(
+        JSON.stringify({ cleared: true, global_mute: false }),
+        { headers: { "content-type": "application/json" } }
+      );
+    }
+
     // Webhook endpoint
     if (req.method !== "POST" || url.pathname !== "/webhook") {
       return new Response("not found", { status: 404 });
@@ -289,13 +315,14 @@ Bun.serve({
 
     // Format and push to Claude Code session
     const summary = formatSummary(eventType, payload);
+    const content = CHANNEL_TIP ? `${summary}\n\n${CHANNEL_TIP}` : summary;
     const action = payload.action || "";
 
     try {
       await mcp.notification({
         method: "notifications/claude/channel",
         params: {
-          content: summary,
+          content,
           meta: {
             event_type: eventType,
             repo,
