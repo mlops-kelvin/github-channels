@@ -60,6 +60,13 @@ const ALLOWED_EVENTS = (process.env.GITHUB_EVENTS || "")
   .map((e) => e.trim())
   .filter(Boolean);
 
+const TRUSTED_ACTORS = new Set(
+  (process.env.TRUSTED_ACTORS || "")
+    .split(",")
+    .map((a) => a.trim().toLowerCase())
+    .filter(Boolean)
+);
+
 const CHANNEL_TIP = process.env.CHANNEL_TIP || "";
 
 let muted = process.env.MUTED === "true";
@@ -262,7 +269,6 @@ Bun.serve({
       }
       const hours = url.searchParams.get("hours");
       muteRepo(repo, hours ? parseFloat(hours) : undefined);
-      const msg = hours ? `muted ${repo} for ${hours}h` : `muted ${repo} indefinitely`;
       return new Response(JSON.stringify({ repo, muted: true, hours: hours || "indefinite" }), {
         headers: { "content-type": "application/json" },
       });
@@ -284,9 +290,8 @@ Bun.serve({
         muteRepo(repo, hours ? parseFloat(hours) : undefined);
       }
       muted = ALLOWED_REPOS.length === 0; // global mute if no repo allowlist
-      const msg = hours ? `${hours}h` : "indefinite";
       return new Response(
-        JSON.stringify({ muted_repos: ALLOWED_REPOS, hours: msg, global_mute: muted }),
+        JSON.stringify({ muted_repos: ALLOWED_REPOS, hours: hours || "indefinite", global_mute: muted }),
         { headers: { "content-type": "application/json" } }
       );
     }
@@ -363,6 +368,8 @@ Bun.serve({
     const summary = truncate(formatSummary(eventType, payload));
     const content = CHANNEL_TIP ? `${summary}\n\n${CHANNEL_TIP}` : summary;
     const action = payload.action || "";
+    const actor = (payload.sender?.login || "unknown").toLowerCase();
+    const trustTier = TRUSTED_ACTORS.has(actor) ? "team" : "external";
 
     eventCounts.delivered++;
 
@@ -375,6 +382,7 @@ Bun.serve({
             event_type: eventType,
             repo,
             author: payload.sender?.login || "unknown",
+            trust_tier: trustTier,
             action,
             ...(payload.issue ? { issue_number: String(payload.issue.number) } : {}),
             ...(payload.pull_request ? { pr_number: String(payload.pull_request.number) } : {}),
