@@ -37,7 +37,35 @@ On each monitored repo: Settings > Webhooks > Add webhook
 
 ### Reverse proxy
 
-The server binds to `127.0.0.1:8789` (localhost only). Your reverse proxy (Angie, nginx, Caddy) must forward `/webhook` to it so GitHub can deliver events.
+The server binds to `127.0.0.1:8789` (localhost only). A reverse proxy must forward `/webhook` to it so GitHub can deliver events. TLS termination happens at the proxy, not the plugin.
+
+**Angie / nginx:**
+
+```nginx
+location /webhook {
+    proxy_pass http://127.0.0.1:8789/webhook;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    # Only allow POST (webhooks are always POST)
+    limit_except POST { deny all; }
+}
+```
+
+**Security hardening** (optional but recommended):
+
+- Restrict to [GitHub's webhook IP ranges](https://api.github.com/meta) (`hooks` key) at the proxy level
+- Add rate limiting at the proxy (`limit_req_zone` in nginx/Angie)
+- Never expose port 8789 directly to the internet — always proxy
+
+**Verify the proxy works:**
+
+```bash
+# Should return 401 (invalid signature) — proves the proxy forwards to the server
+curl -X POST https://your-domain.com/webhook -H "Content-Type: application/json" -d '{}'
+```
 
 ## Start Claude Code
 
