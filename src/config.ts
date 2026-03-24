@@ -69,7 +69,9 @@ function loadConfig(): Config {
         const m = line.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
         if (m) env[m[1]] = m[2].replace(/^(['"])(.*)\1$/, "$2");
       }
-    } catch {}
+    } catch (err) {
+      process.stderr.write(`github-channels: failed to read legacy .env: ${err}\n`);
+    }
 
     base = {
       port: parseInt(env.PORT || String(defaults.port), 10),
