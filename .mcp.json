@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "github-channels": {
+      "type": "stdio",
+      "command": "bun",
+      "args": ["run", "server.ts"],
+      "cwd": "/home/kelvin/projects/github-channels"
+    }
+  }
+}
