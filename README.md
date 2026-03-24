@@ -53,14 +53,14 @@ Add to your project's `.claude/settings.json` or `.mcp.json`:
 
 On each monitored repo: Settings > Webhooks > Add webhook
 
-- **Payload URL**: `https://your-domain.com/webhook/github` (proxied to localhost:8789)
+- **Payload URL**: `https://your-domain.com/webhook` (reverse proxy forwards to localhost:8789/webhook)
 - **Content type**: `application/json`
 - **Secret**: same value as `GITHUB_WEBHOOK_SECRET` in .env
 - **Events**: select the events matching your `GITHUB_EVENTS` config
 
 ### 5. Reverse proxy
 
-The server binds to `127.0.0.1:8789` (localhost only). Use a reverse proxy (Angie, nginx, Caddy) to expose `/webhook/github` to the internet for GitHub to reach.
+The server binds to `127.0.0.1:8789` (localhost only). Use a reverse proxy (Angie, nginx, Caddy) to expose the `/webhook` endpoint to the internet for GitHub to reach.
 
 ## Control Endpoints
 
@@ -142,7 +142,7 @@ The MCP instructions warn agents about prompt injection via public repo comments
 ## Development
 
 ```bash
-bun test           # run test suite (14 tests)
+bun test           # run test suite (17 tests)
 bun run dev        # start with --watch for development
 ```
 
