@@ -47,6 +47,9 @@ const CHANNEL_TIP = process.env.CHANNEL_TIP || "";
 
 let muted = process.env.MUTED === "true";
 
+// Event counters
+const eventCounts = { received: 0, delivered: 0, filtered: 0, muted: 0 };
+
 // Per-repo mutes with optional expiry
 const repoMutes = new Map<string, number | null>(); // repo → expiry timestamp (null = indefinite)
 
@@ -214,6 +217,7 @@ Bun.serve({
           repos: ALLOWED_REPOS,
           events: ALLOWED_EVENTS,
           port: PORT,
+          counts: eventCounts,
         }),
         { headers: { "content-type": "application/json" } }
       );
@@ -294,22 +298,28 @@ Bun.serve({
       });
     }
 
+    eventCounts.received++;
+
     // Filter: repo allowlist
     const repo = payload.repository?.full_name || "";
     if (ALLOWED_REPOS.length > 0 && !ALLOWED_REPOS.includes(repo)) {
+      eventCounts.filtered++;
       return new Response("repo not in allowlist", { status: 403 });
     }
 
     // Filter: event type
     if (ALLOWED_EVENTS.length > 0 && !ALLOWED_EVENTS.includes(eventType)) {
+      eventCounts.filtered++;
       return new Response("event type filtered", { status: 200 });
     }
 
     // Mute check (global then per-repo)
     if (muted) {
+      eventCounts.muted++;
       return new Response("muted", { status: 200 });
     }
     if (isRepoMuted(repo)) {
+      eventCounts.muted++;
       return new Response("repo muted", { status: 200 });
     }
 
@@ -317,6 +327,8 @@ Bun.serve({
     const summary = formatSummary(eventType, payload);
     const content = CHANNEL_TIP ? `${summary}\n\n${CHANNEL_TIP}` : summary;
     const action = payload.action || "";
+
+    eventCounts.delivered++;
 
     try {
       await mcp.notification({
