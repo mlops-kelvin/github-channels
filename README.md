@@ -5,10 +5,14 @@ Claude Code plugin that streams GitHub webhook events into your session in real-
 ## Install
 
 ```bash
-claude plugins add mlops-kelvin/github-channels
+# Add the marketplace (one-time)
+claude plugins marketplace add mlops-kelvin/github-channels
+
+# Install the plugin
+claude plugins install github-channels
 ```
 
-That's it. The plugin registers its MCP server automatically. On first run, it:
+Restart Claude Code after installing. The plugin registers its MCP server automatically. On first run, it:
 - Creates a config template at `~/.claude/channels/github-channels/config.json`
 - Auto-generates a webhook secret at `~/.github-channels-secret`
 
