@@ -280,6 +280,73 @@ describe("ping", () => {
 // 404
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Mute-all / Unmute-all
+// ---------------------------------------------------------------------------
+
+describe("mute-all / unmute-all", () => {
+  it("mutes all configured repos", async () => {
+    let res = await fetch(`${BASE}/mute-all?hours=2`, { method: "POST" });
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.muted_repos).toEqual(["test-org/repo-a", "test-org/repo-b"]);
+    expect(data.hours).toBe("2");
+
+    // Events from any configured repo should be muted
+    res = await webhook("push", {
+      repository: { full_name: "test-org/repo-a" },
+      sender: { login: "dev" },
+      ref: "refs/heads/main",
+      commits: [{ message: "test" }],
+    });
+    expect(await res.text()).toBe("repo muted");
+
+    // Clean up
+    await fetch(`${BASE}/unmute-all`, { method: "POST" });
+  });
+
+  it("unmute-all clears everything", async () => {
+    await fetch(`${BASE}/mute`, { method: "POST" });
+    await fetch(`${BASE}/mute/test-org/repo-a`, { method: "POST" });
+
+    const res = await fetch(`${BASE}/unmute-all`, { method: "POST" });
+    const data = await res.json();
+    expect(data.cleared).toBe(true);
+    expect(data.global_mute).toBe(false);
+
+    // Verify status is clean
+    const status = await (await fetch(`${BASE}/status`)).json();
+    expect(status.muted).toBe(false);
+    expect(Object.keys(status.mutedRepos)).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Event counters
+// ---------------------------------------------------------------------------
+
+describe("event counters", () => {
+  it("tracks counts in /status", async () => {
+    const before = await (await fetch(`${BASE}/status`)).json();
+    const prevDelivered = before.counts.delivered;
+
+    await webhook("push", {
+      repository: { full_name: "test-org/repo-a" },
+      sender: { login: "dev" },
+      ref: "refs/heads/main",
+      commits: [{ message: "counter test" }],
+    });
+
+    const after = await (await fetch(`${BASE}/status`)).json();
+    expect(after.counts.delivered).toBeGreaterThan(prevDelivered);
+    expect(after.counts.received).toBeGreaterThan(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 404
+// ---------------------------------------------------------------------------
+
 describe("routing", () => {
   it("returns 404 for unknown paths", async () => {
     const res = await fetch(`${BASE}/nonexistent`);
