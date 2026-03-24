@@ -9,10 +9,6 @@ export const configDir = join(homedir(), ".claude", "channels", "github-channels
 export const configFile = join(configDir, "config.json");
 export const secretFile = join(homedir(), ".github-channels-secret");
 
-// --- Legacy .env path (for migration) ---
-
-const LEGACY_ENV = join(import.meta.dir, "..", ".env");
-
 // --- Config types ---
 
 interface Config {
@@ -31,7 +27,7 @@ function parseList(value: string): string[] {
   return value.split(",").map(s => s.trim()).filter(Boolean);
 }
 
-// --- Load config (env vars > config.json > legacy .env > defaults) ---
+// --- Load config (env vars > config.json > defaults) ---
 
 function loadConfig(): Config {
   const defaults: Config = {
@@ -44,7 +40,7 @@ function loadConfig(): Config {
     muted: false,
   };
 
-  // Base config: try config.json, then legacy .env, then defaults
+  // Base config: try config.json, then defaults
   let base = { ...defaults };
 
   if (existsSync(configFile)) {
@@ -62,28 +58,6 @@ function loadConfig(): Config {
     } catch (err) {
       process.stderr.write(`github-channels: failed to parse ${configFile}: ${err}\n`);
     }
-  } else if (existsSync(LEGACY_ENV)) {
-    const env: Record<string, string> = {};
-    try {
-      for (const line of readFileSync(LEGACY_ENV, "utf8").split("\n")) {
-        const m = line.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
-        if (m) env[m[1]] = m[2].replace(/^(['"])(.*)\1$/, "$2");
-      }
-    } catch (err) {
-      process.stderr.write(`github-channels: failed to read legacy .env: ${err}\n`);
-    }
-
-    base = {
-      port: parseInt(env.PORT || String(defaults.port), 10),
-      host: env.HOST || defaults.host,
-      repos: parseList(env.GITHUB_REPOS || ""),
-      events: parseList(env.GITHUB_EVENTS || "").length > 0
-        ? parseList(env.GITHUB_EVENTS || "")
-        : defaults.events,
-      trusted_actors: parseList(env.TRUSTED_ACTORS || ""),
-      channel_tip: env.CHANNEL_TIP || defaults.channel_tip,
-      muted: env.MUTED === "true",
-    };
   } else {
     // No config found — create template on first run
     mkdirSync(configDir, { recursive: true });
