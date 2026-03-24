@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
-import { createHmac } from "crypto";
+import { createHmac, randomBytes } from "crypto";
 
 const PORT = 18789; // test port — avoids conflict with running instance
 const BASE = `http://127.0.0.1:${PORT}`;
-const SECRET = "test-webhook-secret-123";
+const HMAC_KEY = randomBytes(20).toString("hex"); // generated per test run
 
 // We test the HTTP layer directly. MCP stdio is tested implicitly —
 // if the server starts and responds to HTTP, the MCP transport is alive.
@@ -16,7 +16,7 @@ beforeAll(async () => {
     env: {
       ...process.env,
       PORT: String(PORT),
-      GITHUB_WEBHOOK_SECRET: SECRET,
+      GITHUB_WEBHOOK_SECRET: HMAC_KEY,
       GITHUB_REPOS: "test-org/repo-a,test-org/repo-b",
       GITHUB_EVENTS: "push,pull_request,issues,issue_comment",
       MUTED: "false",
@@ -41,7 +41,7 @@ afterAll(() => {
 });
 
 function sign(body: string): string {
-  return "sha256=" + createHmac("sha256", SECRET).update(body).digest("hex");
+  return "sha256=" + createHmac("sha256", HMAC_KEY).update(body).digest("hex");
 }
 
 function webhook(
@@ -273,6 +273,73 @@ describe("ping", () => {
     const data = await res.json();
     expect(data.ok).toBe(true);
     expect(data.zen).toBe("Keep it logically awesome.");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 404
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Mute-all / Unmute-all
+// ---------------------------------------------------------------------------
+
+describe("mute-all / unmute-all", () => {
+  it("mutes all configured repos", async () => {
+    let res = await fetch(`${BASE}/mute-all?hours=2`, { method: "POST" });
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.muted_repos).toEqual(["test-org/repo-a", "test-org/repo-b"]);
+    expect(data.hours).toBe("2");
+
+    // Events from any configured repo should be muted
+    res = await webhook("push", {
+      repository: { full_name: "test-org/repo-a" },
+      sender: { login: "dev" },
+      ref: "refs/heads/main",
+      commits: [{ message: "test" }],
+    });
+    expect(await res.text()).toBe("repo muted");
+
+    // Clean up
+    await fetch(`${BASE}/unmute-all`, { method: "POST" });
+  });
+
+  it("unmute-all clears everything", async () => {
+    await fetch(`${BASE}/mute`, { method: "POST" });
+    await fetch(`${BASE}/mute/test-org/repo-a`, { method: "POST" });
+
+    const res = await fetch(`${BASE}/unmute-all`, { method: "POST" });
+    const data = await res.json();
+    expect(data.cleared).toBe(true);
+    expect(data.global_mute).toBe(false);
+
+    // Verify status is clean
+    const status = await (await fetch(`${BASE}/status`)).json();
+    expect(status.muted).toBe(false);
+    expect(Object.keys(status.mutedRepos)).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Event counters
+// ---------------------------------------------------------------------------
+
+describe("event counters", () => {
+  it("tracks counts in /status", async () => {
+    const before = await (await fetch(`${BASE}/status`)).json();
+    const prevDelivered = before.counts.delivered;
+
+    await webhook("push", {
+      repository: { full_name: "test-org/repo-a" },
+      sender: { login: "dev" },
+      ref: "refs/heads/main",
+      commits: [{ message: "counter test" }],
+    });
+
+    const after = await (await fetch(`${BASE}/status`)).json();
+    expect(after.counts.delivered).toBeGreaterThan(prevDelivered);
+    expect(after.counts.received).toBeGreaterThan(0);
   });
 });
 
