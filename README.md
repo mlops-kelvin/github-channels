@@ -154,15 +154,6 @@ username pushed 3 commit(s) to owner/repo/main
 - Content truncated to 2000 chars to prevent context flooding
 - Agent instructions include prompt injection response protocol
 
-## Migration from .env
-
-If you have an existing `.env` file in the repo, it still works. The plugin checks:
-1. `~/.claude/channels/github-channels/config.json` (new)
-2. `.env` in the repo directory (legacy)
-3. `GITHUB_WEBHOOK_SECRET` environment variable
-
-To migrate: copy your `.env` values into `config.json` format, then delete the `.env`.
-
 ## Development
 
 ```bash
