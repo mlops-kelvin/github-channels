@@ -1,15 +1,16 @@
 {
-  "name": "github-channels",
+  "name": "claude-channel-github",
   "version": "0.1.0",
-  "description": "MCP channel server that pushes GitHub webhook events into Claude Code sessions",
+  "description": "GitHub webhook channel for Claude Code — real-time events via MCP channel protocol",
+  "license": "MIT",
   "type": "module",
-  "main": "server.ts",
+  "bin": "./server.ts",
   "scripts": {
-    "start": "bun run server.ts",
-    "dev": "bun run --watch server.ts"
+    "start": "bun install --no-summary && bun server.ts",
+    "dev": "bun run --watch server.ts",
+    "test": "bun test"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1"
-  },
-  "license": "MIT"
+  }
 }

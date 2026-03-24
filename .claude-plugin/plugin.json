@@ -1,0 +1,12 @@
+{
+  "name": "github-channels",
+  "description": "GitHub webhook channel for Claude Code — real-time push, PR, issue, and CI events streamed into your session with trust tiers and mute controls.",
+  "version": "0.1.0",
+  "keywords": [
+    "github",
+    "webhooks",
+    "channel",
+    "mcp",
+    "events"
+  ]
+}
