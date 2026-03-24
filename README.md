@@ -74,10 +74,19 @@ curl -X POST https://your-domain.com/webhook -H "Content-Type: application/json"
 ## Start Claude Code
 
 ```bash
-claude --dangerously-load-development-channels server:github-channels
+claude --dangerously-load-development-channels plugin:github-channels@github-channels
 ```
 
-This tells Claude Code to treat the plugin's MCP server as a channel server. Without this flag, events won't stream into your session.
+This tells Claude Code to treat the plugin's MCP server as a development channel. Without this flag, the MCP server runs but events won't stream into your session.
+
+**With Discord plugin** (both channels active):
+
+```bash
+claude --dangerously-load-development-channels plugin:github-channels@github-channels --channels plugin:discord@claude-plugins-official
+```
+
+- `--dangerously-load-development-channels`: for third-party plugins (bypasses Anthropic's channel allowlist)
+- `--channels`: for official plugins (on the allowlist)
 
 ## Verify
 
@@ -129,8 +138,9 @@ username pushed 3 commit(s) to owner/repo/main
 
 | Symptom | Fix |
 |---------|-----|
-| `no MCP server configured` | Plugin not installed or not loaded |
-| `mcp_connected: false` | Missing `--dangerously-load-development-channels server:github-channels` flag |
+| `no MCP server configured` | Plugin not installed — run `claude plugins install github-channels` |
+| `mcp_connected: false` | Missing `--dangerously-load-development-channels plugin:github-channels@github-channels` flag |
+| `not on the approved channels allowlist` | Used `--channels` instead of `--dangerously-load-development-channels` for this plugin |
 | `counts.received: 0` | Webhooks not reaching server — check GitHub deliveries tab and reverse proxy |
 | 401 on webhook | Secret mismatch — `~/.github-channels-secret` must match GitHub webhook config |
 | 403 on webhook | Repo not in `repos` list in config.json |
