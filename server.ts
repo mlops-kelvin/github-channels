@@ -45,6 +45,42 @@ const ALLOWED_EVENTS = (process.env.GITHUB_EVENTS || "")
 
 let muted = process.env.MUTED === "true";
 
+// Per-repo mutes with optional expiry
+const repoMutes = new Map<string, number | null>(); // repo → expiry timestamp (null = indefinite)
+
+function isRepoMuted(repo: string): boolean {
+  const expiry = repoMutes.get(repo);
+  if (expiry === undefined) return false;
+  if (expiry === null) return true; // indefinite
+  if (Date.now() < expiry) return true;
+  repoMutes.delete(repo); // expired — clean up
+  return false;
+}
+
+function muteRepo(repo: string, hours?: number): void {
+  repoMutes.set(repo, hours ? Date.now() + hours * 3600_000 : null);
+}
+
+function unmuteRepo(repo: string): boolean {
+  return repoMutes.delete(repo);
+}
+
+function listMutedRepos(): Record<string, string> {
+  const result: Record<string, string> = {};
+  const now = Date.now();
+  for (const [repo, expiry] of repoMutes) {
+    if (expiry === null) {
+      result[repo] = "indefinite";
+    } else if (expiry > now) {
+      const remaining = Math.ceil((expiry - now) / 3600_000 * 10) / 10;
+      result[repo] = `${remaining}h remaining`;
+    } else {
+      repoMutes.delete(repo); // expired
+    }
+  }
+  return result;
+}
+
 // ---------------------------------------------------------------------------
 // MCP Server
 // ---------------------------------------------------------------------------
@@ -172,12 +208,36 @@ Bun.serve({
       return new Response(
         JSON.stringify({
           muted,
+          mutedRepos: listMutedRepos(),
           repos: ALLOWED_REPOS,
           events: ALLOWED_EVENTS,
           port: PORT,
         }),
         { headers: { "content-type": "application/json" } }
       );
+    }
+
+    // Per-repo mute: POST /mute/owner/repo?hours=5
+    if (req.method === "POST" && url.pathname.startsWith("/mute/")) {
+      const repo = url.pathname.slice("/mute/".length);
+      if (!repo.includes("/")) {
+        return new Response("invalid repo format — use owner/repo", { status: 400 });
+      }
+      const hours = url.searchParams.get("hours");
+      muteRepo(repo, hours ? parseFloat(hours) : undefined);
+      const msg = hours ? `muted ${repo} for ${hours}h` : `muted ${repo} indefinitely`;
+      return new Response(JSON.stringify({ repo, muted: true, hours: hours || "indefinite" }), {
+        headers: { "content-type": "application/json" },
+      });
+    }
+
+    // Per-repo unmute: POST /unmute/owner/repo
+    if (req.method === "POST" && url.pathname.startsWith("/unmute/")) {
+      const repo = url.pathname.slice("/unmute/".length);
+      const was = unmuteRepo(repo);
+      return new Response(JSON.stringify({ repo, muted: false, was_muted: was }), {
+        headers: { "content-type": "application/json" },
+      });
     }
 
     // Webhook endpoint
@@ -219,9 +279,12 @@ Bun.serve({
       return new Response("event type filtered", { status: 200 });
     }
 
-    // Mute check
+    // Mute check (global then per-repo)
     if (muted) {
       return new Response("muted", { status: 200 });
+    }
+    if (isRepoMuted(repo)) {
+      return new Response("repo muted", { status: 200 });
     }
 
     // Format and push to Claude Code session
