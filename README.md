@@ -33,9 +33,17 @@ TRUSTED_ACTORS=your-username,teammate     # GitHub usernames — events tagged t
 CHANNEL_TIP=Tip: curl -X POST localhost:8789/mute/owner/repo?hours=5 to mute a noisy repo.
 ```
 
-### 3. Wire into Claude Code
+### 3. Start Claude Code with Channels
 
-Add to your project's `.claude/settings.json` or `.mcp.json`:
+Launch Claude Code with the development channels flag:
+
+```bash
+claude --dangerously-load-development-channels server:github-channels --channels plugin:discord@claude-plugins-official
+```
+
+This loads `github-channels` as a development channel server and the Discord plugin from `claude-plugins-official`. Both are required for real-time perception of GitHub events and Discord messages within your Claude Code session.
+
+Alternatively, wire it as an MCP server in your project's `.claude/settings.json` or `.mcp.json`:
 
 ```json
 {
